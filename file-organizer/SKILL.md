@@ -1,10 +1,8 @@
----
 name: file-organizer
+
 description: Intelligently organizes files and folders by analyzing content, finding duplicates, suggesting structures, renaming files based on content, and maintaining a markdown index of the directory.
----
 
-#instructions
-
+#instructions:
 File Organizer
 This skill acts as your personal organization assistant, helping you maintain a clean, logical file structure across your computer (compatible with Windows, macOS, and Linux). It reduces the cognitive load of manual organization by analyzing file contents, identifying duplicates, proposing directory structures, intelligently renaming files based on their actual content, and generating a tracking index to keep everything searchable.
 When to Use This Skill
@@ -16,6 +14,9 @@ When to Use This Skill
 •	You want to establish better organization habits
 •	You're starting a new project and need a good structure
 •	You're cleaning up before archiving old projects
+Important Note for Claude Code Users
+If you are running this skill via Claude Code and experience PostToolUse:Bash hook error messages, this is a known issue in Claude Code (Issue #33656) where hooks misreport errors if the underlying Bash command exits non-zero (e.g., when a find command encounters a permission denied error on a single file).
+To prevent this, ensure your commands suppress non-critical errors or always exit 0 if the error is expected. The instructions below have been designed to minimize these false positives.
 What This Skill Does
 1.	Analyzes Current Structure: Reviews your folders and files to understand what you have
 2.	Inspects File Content: Reads the actual contents of documents to understand their purpose
@@ -52,10 +53,10 @@ Review the target directory using the appropriate commands for the user's OS:
 On Windows (PowerShell):
 powershell
 # Get overview of current structure
-Get-ChildItem -Path [target_directory]
+Get-ChildItem -Path [target_directory] -ErrorAction Ignore
 
 # Identify largest files
-Get-ChildItem -Path [target_directory] -File |
+Get-ChildItem -Path [target_directory] -File -ErrorAction Ignore |
   Sort-Object Length -Descending |
   Select-Object -First 20 Name,
     @{Name='Size(MB)'; Expression={ [math]::Round($_.Length / 1MB, 2) }},
@@ -63,7 +64,7 @@ Get-ChildItem -Path [target_directory] -File |
   Format-Table -AutoSize
 
 # Count file types
-Get-ChildItem -Path [target_directory] -File |
+Get-ChildItem -Path [target_directory] -File -ErrorAction Ignore |
   Group-Object -Property Extension |
   Sort-Object Count -Descending |
   Select-Object Count, Name
@@ -72,14 +73,14 @@ bash
 # Get overview of current structure
 ls -la [target_directory]
 
-# Check file types and sizes
-find [target_directory] -type f -exec file {} + | head -20
+# Check file types and sizes (suppress permission errors to avoid Claude Code hook failures)
+find [target_directory] -type f -exec file {} + 2>/dev/null | head -20
 
 # Identify largest files safely
-find [target_directory] -maxdepth 1 -type f -exec du -sh {} + | sort -rh | head -20
+find [target_directory] -maxdepth 1 -type f -exec du -sh {} + 2>/dev/null | sort -rh | head -20
 
 # Count file types
-find [target_directory] -type f | sed 's/.*\.//' | sort | uniq -c | sort -rn
+find [target_directory] -type f 2>/dev/null | sed 's/.*\.//' | sort | uniq -c | sort -rn
 Summarize findings:
 •	Total files and folders
 •	File type breakdown
@@ -95,16 +96,17 @@ For files with generic or non-descriptive names (e.g., document1.pdf, untitled.t
 When requested, search for duplicates safely using cryptographic hashes:
 On Windows (PowerShell):
 powershell
-# Find duplicates by hash
-Get-ChildItem -Path [directory] -File -Recurse |
-  Get-FileHash |
+# Find duplicates by hash (ErrorAction Ignore prevents Claude Code hook errors on locked files)
+Get-ChildItem -Path [directory] -File -Recurse -ErrorAction Ignore |
+  Get-FileHash -ErrorAction Ignore |
   Group-Object -Property Hash |
   Where-Object { $_.Count -gt 1 } |
   ForEach-Object { $_.Group | Select-Object Path, Hash }
 On macOS/Linux (Bash):
 bash
 # Find exact duplicates by hash (use md5sum on Linux, md5 on macOS)
-find [directory] -type f -exec md5sum {} + | sort | uniq -w32 -dD
+# Suppress stderr to prevent Claude Code PostToolUse hook errors on locked files
+find [directory] -type f -exec md5sum {} + 2>/dev/null | sort | uniq -w32 -dD
 For each set of duplicates:
 •	Show all file paths
 •	Display sizes and modification dates
@@ -176,6 +178,7 @@ Important Rules:
 •	Preserve original modification dates where possible
 •	Handle filename conflicts gracefully (e.g., append -1)
 •	Stop and ask if you encounter unexpected situations or permissions errors
+•	CRITICAL: When using Bash to move or rename files, use variables for paths to avoid shell quoting errors with apostrophes (e.g., src="file.pdf"; dest="Anomalou's.pdf"; mv "$src" "$dest"). Never use double quotes directly around paths with apostrophes inside a bash -c call, as it will cause an unexpected EOF error.
 7. Generate Content Index (index.md)
 After the files are organized and renamed, generate a markdown file named index.md in the root of the organized directory. This file serves as a persistent tracking document.
 The index.md must contain:
