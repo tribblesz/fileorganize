@@ -232,6 +232,6 @@ To keep this organized:
 1. **Weekly**: Sort new downloads and run the organizer to update `index.md`
 2. **Monthly**: Review and archive completed projects
 3. **Quarterly**: Check for new duplicates
-4. **Yearly**: Archive old files
+4. **Yearly**: Archive files older than 15 years and clean up the structure
 
 Want to organize another folder?
