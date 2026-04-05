@@ -21,7 +21,7 @@ If you are running this skill via Claude Code and experience PostToolUse:Bash ho
 To prevent this, ensure your commands suppress non-critical errors or always exit 0 if the error is expected. The instructions below have been designed to minimize these false positives.
 What This Skill Does
 1.	Analyzes Current Structure: Reviews your folders and files to understand what you have
-2.	Inspects File Content: Reads the actual contents of documents to understand their purpose
+2.	Inspects File Content: Reads the actual contents of documents to understand their purpose.  Don't read more than 3 pages to capture the main topic without overwhelming the system. For images, use vision models to identify key elements. For videos, extract metadata and key frames to understand the content. This allows for intelligent renaming and organization based on what's actually inside the files, not just their names. For files with non-standard extensions, leave them where they are and in the original state and folder structure, and log them in the index.md with a note that they were skipped due to unrecognized format.
 3.	Intelligent Renaming: Suggests and applies new, highly descriptive filenames based on the extracted content
 4.	Finds Duplicates: Identifies duplicate files across your system safely using hashes
 5.	Suggests Organization: Proposes logical folder structures based on your content
@@ -91,9 +91,11 @@ Summarize findings:
 •	Obvious organization issues
 3. Inspect Content and Propose Renaming
 For files with generic or non-descriptive names (e.g., document1.pdf, untitled.txt, IMG_1234.jpg), inspect their contents to determine a suitable name.
-•	Use appropriate tools to read the file content (e.g., Get-Content or cat for text, pdftotext for PDFs, or vision models for images).
+•	Use appropriate tools to read the file content (e.g., Get-Content or cat for text, pdftotext for PDFs, or vision models for images). For images, use vision models to identify key elements. For videos, extract metadata and key frames to understand the content. This allows for intelligent renaming and organization based on what's actually inside the files, not just their names.
 •	Determine a descriptive name using a consistent format, such as YYYY-MM-DD - Topic - Description.ext.
 •	Crucial: Keep track of the original filename so it can be logged in the index later.
+•	Don't read more than 3 pages to capture the main topic without overwhelming the system.  
+•	For files with non-standard extensions, leave them where they are and in the original state and folder structure, and log them in the index.md with a note that they were skipped due to unrecognized format.
 4. Find Duplicates
 When requested, search for duplicates safely using cryptographic hashes:
 On Windows (PowerShell):
