@@ -1,7 +1,9 @@
 
+---
 name: file-organizer
 
 description: Intelligently organizes files and folders by analyzing content, finding duplicates, suggesting structures, renaming files based on content, and maintaining a markdown index of the directory.
+---
 
 #instructions:
 File Organizer
