@@ -1,235 +1,72 @@
 name: file-organizer
-
-description: Intelligently organizes files and folders by analyzing content, finding duplicates, suggesting structures, renaming files based on content, and maintaining a markdown index of the directory.
-
+description: Intelligently organizes files and folders by analyzing content, finding duplicates, suggesting structures, renaming files based on content, and maintaining a persistent memory index to manage context length.
 #instructions:
 File Organizer
-This skill acts as your personal organization assistant, helping you maintain a clean, logical file structure across your computer (compatible with Windows, macOS, and Linux). It reduces the cognitive load of manual organization by analyzing file contents, identifying duplicates, proposing directory structures, intelligently renaming files based on their actual content, and generating a tracking index to keep everything searchable.
-When to Use This Skill
-•	Your Downloads folder is a chaotic mess
-•	Files lack descriptive names and require renaming based on their internal content
-•	You need a searchable index of what files exist and what they contain
-•	You have duplicate files taking up space
-•	Your folder structure doesn't make sense anymore
-•	You want to establish better organization habits
-•	You're starting a new project and need a good structure
-•	You're cleaning up before archiving old projects
+This skill acts as your personal organization assistant, helping you maintain a clean, logical file structure across your computer. It reduces cognitive load by analyzing file contents in chunks (to prevent context window overflow), proposing directory structures, intelligently renaming files, and generating a persistent memory.md tracker to keep knowledge accessible without exceeding context limits.
 Important Note for Claude Code Users
-If you are running this skill via Claude Code and experience PostToolUse:Bash hook error messages, this is a known issue in Claude Code (Issue #33656) where hooks misreport errors if the underlying Bash command exits non-zero (e.g., when a find command encounters a permission denied error on a single file).
-To prevent this, ensure your commands suppress non-critical errors or always exit 0 if the error is expected. The instructions below have been designed to minimize these false positives.
+If you experience PostToolUse:Bash hook error messages, this is a known issue (Issue #33656) where hooks misreport errors if the underlying Bash command exits non-zero (e.g., when a find command encounters a permission denied error). Ensure your commands suppress non-critical errors or always exit 0 if the error is expected.
 What This Skill Does
-1.	Analyzes Current Structure: Reviews your folders and files to understand what you have
-2.	Inspects File Content: Reads the actual contents of documents to understand their purpose
-3.	Intelligent Renaming: Suggests and applies new, highly descriptive filenames based on the extracted content
-4.	Finds Duplicates: Identifies duplicate files across your system safely using hashes
-5.	Suggests Organization: Proposes logical folder structures based on your content
-6.	Automates Cleanup: Moves, renames, and organizes files with your approval
-7.	Maintains Content Index: Generates and updates an index.md file that tracks the contents, old names, new names, and summaries of the organized directory
-How to Use
-From Your Home Directory
-On Windows (PowerShell):
-powershell
-cd $HOME
-On macOS/Linux:
-bash
-cd ~
-Then ask for help:
-
-Help me organize my Downloads folder, rename the files based on what's inside them, and create an index.
-
-Find duplicate files in my Documents folder and help me clean it up.
-
-Review my project directories, suggest improvements, and build a content index for me.
+1.	Analyzes Structure: Reviews folders and files to understand current state.
+2.	Context-Aware Content Inspection: Reads file contents in small, controlled chunks to prevent context window truncation.
+3.	Persistent Memory Tracking: Writes file summaries and metadata to a persistent memory.md file, allowing you to drop file contents from active context while retaining the knowledge.
+4.	Intelligent Renaming: Applies new, highly descriptive filenames based on the extracted content, updating the memory.md tracker to link old and new names.
+5.	Finds Duplicates: Identifies duplicates safely using hashes.
+6.	Automates Cleanup: Moves, renames, and organizes files.
+7.	Maintains Content Index: Generates an index.md for user visibility, while relying on memory.md for its own internal state tracking.
 Instructions
-When a user requests file organization help:
-1. Understand the Scope
-Ask clarifying questions:
-•	Which directory needs organization? (Downloads, Documents, entire home folder?)
-•	What's the main problem? (Can't find things, duplicates, too messy, need better names?)
-•	Any files or folders to avoid? (Current projects, sensitive data?)
-•	How aggressively to organize? (Conservative vs. comprehensive cleanup)
-2. Analyze Current State
-Review the target directory using the appropriate commands for the user's OS:
-On Windows (PowerShell):
-powershell
-# Get overview of current structure
-Get-ChildItem -Path [target_directory] -ErrorAction Ignore
-
-# Identify largest files
-Get-ChildItem -Path [target_directory] -File -ErrorAction Ignore |
-  Sort-Object Length -Descending |
-  Select-Object -First 20 Name,
-    @{Name='Size(MB)'; Expression={ [math]::Round($_.Length / 1MB, 2) }},
-    LastWriteTime |
-  Format-Table -AutoSize
-
-# Count file types
-Get-ChildItem -Path [target_directory] -File -ErrorAction Ignore |
-  Group-Object -Property Extension |
-  Sort-Object Count -Descending |
-  Select-Object Count, Name
-On macOS/Linux (Bash):
-bash
-# Get overview of current structure
-ls -la [target_directory]
-
-# Check file types and sizes (suppress permission errors to avoid Claude Code hook failures)
-find [target_directory] -type f -exec file {} + 2>/dev/null | head -20
-
-# Identify largest files safely
-find [target_directory] -maxdepth 1 -type f -exec du -sh {} + 2>/dev/null | sort -rh | head -20
-
-# Count file types
-find [target_directory] -type f 2>/dev/null | sed 's/.*\.//' | sort | uniq -c | sort -rn
-Summarize findings:
-•	Total files and folders
-•	File type breakdown
-•	Size distribution
-•	Date ranges
-•	Obvious organization issues
-3. Inspect Content and Propose Renaming
-For files with generic or non-descriptive names (e.g., document1.pdf, untitled.txt, IMG_1234.jpg), inspect their contents to determine a suitable name.
-•	Use appropriate tools to read the file content (e.g., Get-Content or cat for text, pdftotext for PDFs, or vision models for images).
-•	Determine a descriptive name using a consistent format, such as YYYY-MM-DD - Topic - Description.ext.
-•	Crucial: Keep track of the original filename so it can be logged in the index later.
-4. Find Duplicates
-When requested, search for duplicates safely using cryptographic hashes:
-On Windows (PowerShell):
-powershell
-# Find duplicates by hash (ErrorAction Ignore prevents Claude Code hook errors on locked files)
-Get-ChildItem -Path [directory] -File -Recurse -ErrorAction Ignore |
-  Get-FileHash -ErrorAction Ignore |
-  Group-Object -Property Hash |
-  Where-Object { $_.Count -gt 1 } |
-  ForEach-Object { $_.Group | Select-Object Path, Hash }
-On macOS/Linux (Bash):
-bash
-# Find exact duplicates by hash (use md5sum on Linux, md5 on macOS)
-# Suppress stderr to prevent Claude Code PostToolUse hook errors on locked files
-find [directory] -type f -exec md5sum {} + 2>/dev/null | sort | uniq -w32 -dD
-For each set of duplicates:
-•	Show all file paths
-•	Display sizes and modification dates
-•	Recommend which to keep (usually newest or best-named)
-•	Important: Always ask for confirmation before deleting
-5. Propose Organization Plan
-Present a clear plan before making changes:
+When a user requests file organization help, you MUST follow these steps in order:
+1. Establish Operation Mode (Crucial First Step)
+Before taking any actions, you MUST ask the user which operation mode they prefer:
+**"Before we begin organizing, please choose an operation mode:
+1.	Stop-Point Mode: I will pause and ask for your explicit approval before making any changes (moving, renaming, or deleting files).
+2.	Everything about Stop-Point Mode, but I should have the option at each stage to switch fully to Autonomous Mode.
+3.	Autonomous Mode: I will make all decisions autonomously and execute the entire organization process without interrupting you."**
+Record the user's choice and strictly adhere to it.
+2. Initialize Persistent Memory Tracker (memory.md)
+To manage context length effectively, you must establish a persistent memory file in the root of the target directory.
+•	Create or read the file named memory.md.
+•	This file acts as your external brain. Once you summarize a file and write it to memory.md, you no longer need to keep the raw file contents in your active context.
+Format for memory.md:
 markdown
-# Organization Plan for [Directory]
+# File Organizer Memory Tracker
 
-## Current State
-- X files across Y folders
-- [Size] total
-- File types: [breakdown]
-- Issues: [list problems]
-
-## Proposed Structure
-
-[Directory]/
-├── Work/
-│   ├── Projects/
-│   ├── Documents/
-│   └── Archive/
-├── Personal/
-│   ├── Photos/
-│   ├── Documents/
-│   └── Media/
-└── Downloads/
-    ├── To-Sort/
-    └── Archive/
-
-## Changes I'll Make
-
-1. **Create new folders**: [list]
-2. **Rename files based on content**:
-   - `untitled_doc.pdf` → `2024-10-20 - Q4 Financial Report.pdf`
-   - `scan001.jpg` → `2024-09-15 - Tax Return Receipt.jpg`
-3. **Move files**:
-   - X PDFs → Work/Documents/
-   - Y images → Personal/Photos/
-   - Z old files → Archive/
-4. **Delete**: [duplicates or trash files]
-5. **Create Index**: Generate `index.md` tracking all contents and changes.
-
-## Files Needing Your Decision
-
-- [List any files you're unsure about]
-
-Ready to proceed? (yes/no/modify)
-6. Execute Organization
-After approval, organize systematically using the appropriate OS commands:
+| Original Name | Current Name | Hash/ID | Summary of Content | Status |
+|---|---|---|---|---|
+| `untitled.pdf` | `2024-10-20 - Q4 Report.pdf` | `a1b2c3d4` | Q4 financial report detailing revenue... | Organized |
+3. Context-Aware Content Inspection (Chunking)
+When reading files to determine what they are, DO NOT read the entire file at once if it is large, as this will blow out your context window and cause truncation.
+•	Chunking Strategy: Use commands like head -n 50 [file] or PowerShell's Get-Content -TotalCount 50 to read only the first chunk of a file.
+•	If the first chunk does not contain enough information to generate a descriptive name, read the next chunk (e.g., sed -n '51,100p' [file]).
+•	Once you have enough information to summarize the file, STOP reading.
+•	Immediately write the 1-2 sentence summary to memory.md and drop the raw file text from your active reasoning context.
+4. Find Duplicates
+Search for duplicates safely using cryptographic hashes:
 On Windows (PowerShell):
 powershell
-# Create folder structure
+Get-ChildItem -Path [directory] -File -Recurse -ErrorAction Ignore | Get-FileHash -ErrorAction Ignore | Group-Object -Property Hash | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Group | Select-Object Path, Hash }
+On macOS/Linux (Bash):
+bash
+find [directory] -type f -exec md5sum {} + 2>/dev/null | sort | uniq -w32 -dD
+5. Propose Organization Plan
+Using the knowledge stored in memory.md, present a clear plan. If in Stop-Point Mode, wait for approval. If in Autonomous Mode, proceed immediately.
+6. Execute Organization and Update Trackers
+Execute systematically using the appropriate OS commands:
+On Windows (PowerShell):
+powershell
 New-Item -ItemType Directory -Force -Path "path\to\new\folders"
-
-# Move and rename files
 Move-Item -Path "old\path\untitled_doc.pdf" -Destination "new\path\2024-10-20 - Q4 Financial Report.pdf"
 On macOS/Linux (Bash):
 bash
-# Create folder structure
 mkdir -p "path/to/new/folders"
-
-# Move and rename files with clear logging
 mv "old/path/untitled_doc.pdf" "new/path/2024-10-20 - Q4 Financial Report.pdf"
-Important Rules:
-•	Always confirm before deleting anything
-•	Log all moves in memory to build the index
-•	Preserve original modification dates where possible
-•	Handle filename conflicts gracefully (e.g., append -1)
-•	Stop and ask if you encounter unexpected situations or permissions errors
-•	CRITICAL: When using Bash to move or rename files, use variables for paths to avoid shell quoting errors with apostrophes (e.g., src="file.pdf"; dest="Anomalou's.pdf"; mv "$src" "$dest"). Never use double quotes directly around paths with apostrophes inside a bash -c call, as it will cause an unexpected EOF error.
-7. Generate Content Index (index.md)
-After the files are organized and renamed, generate a markdown file named index.md in the root of the organized directory. This file serves as a persistent tracking document.
-The index.md must contain:
-•	The date of the last organization run.
-•	A visual representation of the directory tree.
-•	A catalog of files, including their new names, original names, and a brief 1-2 sentence summary of their content extracted during step 3.
-Example index.md structure:
-markdown
-# Directory Index
-
-**Last Updated:** 2024-10-25
-
-## Structure
-- /Work
-  - 2024-10-20 - Q4 Financial Report.pdf
-- /Personal
-  - 2024-09-15 - Tax Return Receipt.jpg
-
-## File Catalog
-
-### Work
-- **2024-10-20 - Q4 Financial Report.pdf** (formerly `untitled_doc.pdf`)
-  - *Summary*: The final Q4 financial report detailing revenue, expenses, and projected growth for the upcoming fiscal year.
-
-### Personal
-- **2024-09-15 - Tax Return Receipt.jpg** (formerly `scan001.jpg`)
-  - *Summary*: Scanned receipt for tax preparation services from H&R Block.
-8. Provide Summary and Maintenance Tips
-After organizing and indexing:
-markdown
-# Organization Complete! ✨
-
-## What Changed
-
-- Created [X] new folders
-- Renamed [Y] files based on their content
-- Organized [Z] files into logical directories
-- Freed [W] GB by removing duplicates
-- Generated `index.md` to track all files and their summaries
-
-## New Structure
-
-[Show the new folder tree]
-
-## Maintenance Tips
-
-To keep this organized:
-
-1. **Weekly**: Sort new downloads and run the organizer to update `index.md`
-2. **Monthly**: Review and archive completed projects
-3. **Quarterly**: Check for new duplicates
-4. **Yearly**: Archive old files
-
-Want to organize another folder?
+CRITICAL Execution Rules:
+•	Apostrophes: When using Bash to move or rename files, use variables for paths to avoid shell quoting errors with apostrophes (e.g., src="file.pdf"; dest="Anomalou's.pdf"; mv "$src" "$dest"). Never use double quotes directly around paths with apostrophes inside a bash -c call.
+•	Tracker Updates: As soon as a file is renamed or moved, you MUST update the Current Name and Status columns in memory.md so you do not lose track of the file.
+7. Generate User-Facing Content Index (index.md)
+After organization is complete, generate a clean, user-friendly index.md from the data in memory.md.
+Self-Monitoring and Loop Detection
+As an AI agent executing this skill, you MUST actively monitor your own behavior:
+1.	Loop Detection: If you notice you have executed the same command or received the same error more than 3 times in a row, YOU ARE IN A LOOP.
+2.	Self-Repair: Upon detecting a loop, immediately STOP executing the failing command.
+3.	Skill Modification: If the loop is caused by a fundamental flaw in how this skill is written or interpreted, you must edit this skill file in real-time to fix the issue.
+4.	Skill Placement: Ensure this skill file (FileOrganizer.md or file-organizer.md) is always saved and maintained at the top level of the working folder, directly next to the CLAUDE.md file, so it remains easily accessible and up-to-date for future sessions.
